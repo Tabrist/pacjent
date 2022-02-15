@@ -1,0 +1,93 @@
+version: '3.7'
+services: 
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: bash -c "php artisan migrate --seed && php artisan serve --host=0.0.0.0:80"
+        volumes:
+         - ./publisher:/var/www/html
+        depends_on:
+            - rabbit
+            - db
+        networks:
+         - patient_net
+         
+    receive:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        command: 'php artisan rabbitmq:consume'
+        volumes:
+         - ./receiver:/var/www/html
+        restart: on-failure
+        depends_on:
+            - rabbit
+            - db
+            - app
+        networks:
+         - patient_net
+            
+    nginx:
+        image: nginx
+        ports:
+         - "80:80"
+         - "443:443"
+        volumes:
+         - type: bind
+           source: ./sites-enabled
+           target: /etc/nginx/conf.d
+        networks:
+            - patient_net
+        depends_on:
+            - app
+     
+    rabbit:
+        build:
+            context: ./rabbit
+            dockerfile: Dockerfile
+        ports:
+            - "15672:15672"
+        volumes:
+            - "rabbit_lib:/var/lib/rabbitmq/"
+            - "rabbit_log:/var/log/rabbitmq"
+        networks:
+            - patient_net     
+
+    db:
+        image: mysql:5.7.22
+        environment:
+            MYSQL_DATABASE: larwapp
+            MYSQL_USER: larwapp
+            MYSQL_PASSWORD: gkwmskU93PKMN
+            MYSQL_ROOT_PASSWORD: rootgkwmskU93PKMN
+            SERVICE_TAGS: dev
+            SERVICE_NAME: mysql
+        volumes:
+            - dbdata:/var/lib/mysql/
+            - ./mysql/my.cnf:/etc/mysql/my.cnf
+        networks:
+            - patient_net
+
+    phpmyadmin:
+        image: phpmyadmin
+        ports:
+          - "8080:80"
+        environment:
+            PMA_HOST: "db"
+            MYSQL_ROOT_PASSWORD: rootgkwmskU93PKMN
+        depends_on:
+            - db
+        networks:
+            - patient_net
+
+networks:
+    patient_net:
+
+volumes:
+    rabbit_lib:
+        driver: local
+    rabbit_log:
+        driver: local
+    dbdata:
+        driver: local
